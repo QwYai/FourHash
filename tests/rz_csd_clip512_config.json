@@ -1,0 +1,72 @@
+{
+  "protocol_version": "RZ_CSD_CLIP512_V1",
+  "input_contract": {
+    "image": "image_features_clip512.mat; float32 [N,512] in verified original identity order",
+    "text": "text_features_clip512.mat; float32 [N,512] in the identical identity order",
+    "fit_labels": "official train rows only; binary multi-hot [N_train,L]",
+    "inference_labels": "none"
+  },
+  "dataset_geometry": {
+    "mirflickr": {"all_rows": 20015, "train_rows": 5000, "query_rows": 2243, "database_rows": 17772, "label_dim": 24},
+    "nuswide": {"all_rows": 195834, "train_rows": 21000, "query_rows": 2085, "database_rows": 193749, "label_dim": 81},
+    "mscoco": {"all_rows": 122218, "train_rows": 10500, "query_rows": 5000, "database_rows": 117218, "label_dim": 80}
+  },
+  "architecture": {
+    "feature_dim": 512,
+    "hidden_dim": 256,
+    "feedforward_dim": 512,
+    "residual_layers": 2,
+    "posterior_hidden_dim": 128,
+    "posterior_heads": 5,
+    "hash_widths": [16, 32, 64],
+    "dropout_train_only": 0.1,
+    "canonical_inference_batch_size": 256,
+    "inference_cache": "unique feature rows plus padded fixed-shape microbatches and scatter"
+  },
+  "optimization": {
+    "epochs": 40,
+    "batch_size": 256,
+    "learning_rate": 0.0003,
+    "weight_decay": 0.0001,
+    "ranking_logit_scale": 8.0,
+    "subbag_keep_probability": 0.8,
+    "posterior_prior_binding": "positive-weight logit offset is bound once to prepared indT; zero-positive classes fail",
+    "post_training_head_diversity_gate": {
+      "minimum_pairwise_mad": 0.0001,
+      "minimum_cell_std": 0.00005
+    },
+    "loss_weights": {
+      "prior_balanced_bce": 1.0,
+      "paired_alignment": 0.2,
+      "cross_modal_ranking": 0.25,
+      "quantization": 0.08,
+      "bit_balance": 0.01,
+      "bit_decorrelation": 0.005
+    },
+    "seed": 20260821
+  },
+  "local_decoder": {
+    "active_window": 128,
+    "max_active_candidates": 2048,
+    "max_active_fraction": 0.05,
+    "boundary": "top-window plus exact-RZ tie closure and optional interval-overlap closure",
+    "hard_precedence": "acyclic hierarchy: strict RZ interval graph, then AP maxima inside each Kahn frontier",
+    "graded_completion": "head-permutation-invariant canonical soft-Jaccard evidence only inside the AP frontier",
+    "complexity": "O(A^2) time and O(A^2) boolean workspace: build RZ/AP dominance once, then update frontier counts incrementally",
+    "complexity_audit": "PartialOrderDiagnostics exposes pair tests, frontier visits, dominance-update cells and a deterministic operation count",
+    "numeric_contract": "float64 RZ, relation, interval and local-order calculations",
+    "inactive_tail": "returned in exact upstream RZ order"
+  },
+  "required_ablations": [
+    "raw_clip",
+    "linear",
+    "capacity_mlp",
+    "raw_hamming",
+    "rz",
+    "rz_relevance",
+    "no_rz",
+    "no_graded",
+    "no_uncertainty",
+    "full"
+  ]
+}

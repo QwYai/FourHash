@@ -1,3 +1,39 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.coverage
+
+# Local environments and editor state
+.venv/
+venv/
+.idea/
+.vscode/
+
+# Raw/prepared data and generated experiment artifacts
+Data/
+OralData/
+ProcessData/
+output/
+outputs/
+results/
+runs/
+artifacts/
+checkpoints/
+spool/
+logs/
+
+# Large numerical/model files
+*.mat
+*.npy
+*.npz
+*.pt
+*.pth
+*.ckpt
+*.parquet
+*.jsonl
+*.log
+
+# Manuscript files stay local
+*.tex
+*.bib
+*.pdf

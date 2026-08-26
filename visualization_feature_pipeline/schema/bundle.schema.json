@@ -1,0 +1,289 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/kbs/visualization-feature-provenance-v1.schema.json",
+  "title": "KBS independently extracted visualization feature bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "dataset",
+    "created_utc",
+    "row_count",
+    "boundaries",
+    "authority",
+    "extractors",
+    "rows",
+    "deterministic_splits",
+    "labels",
+    "shards",
+    "inventory"
+  ],
+  "properties": {
+    "schema_version": {"const": "kbs_visualization_feature_provenance_v1"},
+    "bundle_id": {"$ref": "#/$defs/contentId"},
+    "dataset": {"type": "string", "minLength": 1},
+    "created_utc": {"type": "string", "minLength": 1},
+    "row_count": {"type": "integer", "minimum": 1},
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["raw_data_root", "output_kind", "process_data_policy", "raw_data_access"],
+      "properties": {
+        "raw_data_root": {"type": "string", "minLength": 1},
+        "output_kind": {"const": "independent_visualization_features"},
+        "process_data_policy": {"const": "forbidden_as_input_or_authority"},
+        "raw_data_access": {"const": "read_only"}
+      }
+    },
+    "authority": {"$ref": "#/$defs/authority"},
+    "extractors": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"$ref": "#/$defs/extractor"}
+    },
+    "rows": {"$ref": "#/$defs/rowsDescriptor"},
+    "deterministic_splits": {"$ref": "#/$defs/deterministicSplits"},
+    "labels": {"$ref": "#/$defs/labels"},
+    "shards": {
+      "type": "array",
+      "minItems": 3,
+      "items": {"$ref": "#/$defs/shard"}
+    },
+    "inventory": {
+      "type": "array",
+      "minItems": 5,
+      "items": {"$ref": "#/$defs/bundleFile"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["dataset"],
+        "properties": {"dataset": {"const": "nuswide"}}
+      },
+      "then": {
+        "properties": {
+          "row_count": {"const": 195834},
+          "labels": {
+            "properties": {
+              "row_count": {"const": 195834},
+              "class_count": {"const": 21}
+            }
+          },
+          "deterministic_splits": {
+            "properties": {
+              "counts": {
+                "properties": {
+                  "n_rows": {"const": 195834},
+                  "indQ": {"const": 2085},
+                  "indT": {"const": 21000},
+                  "indD": {"const": 193749}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "contentId": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "shape": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "externalFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "size", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "size": {"type": "integer", "minimum": 0},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "bundleFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "size", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "size": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "locator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1},
+        "value": {"type": "string", "minLength": 1}
+      }
+    },
+    "extractor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "extractor_id", "semantic", "model_name", "model_revision",
+        "model_artifact_sha256", "library", "library_version", "code_version",
+        "preprocess", "preprocess_sha256", "output_dtype", "output_shape"
+      ],
+      "properties": {
+        "extractor_id": {"$ref": "#/$defs/contentId"},
+        "semantic": {"enum": ["image", "text"]},
+        "model_name": {"type": "string", "minLength": 1},
+        "model_revision": {"type": "string", "minLength": 1},
+        "model_artifact_sha256": {"$ref": "#/$defs/sha256"},
+        "library": {"type": "string", "minLength": 1},
+        "library_version": {"type": "string", "minLength": 1},
+        "code_version": {"type": "string", "minLength": 1},
+        "preprocess": {"type": "object", "minProperties": 1},
+        "preprocess_sha256": {"$ref": "#/$defs/sha256"},
+        "output_dtype": {"type": "string", "minLength": 1},
+        "output_shape": {"$ref": "#/$defs/shape"}
+      }
+    },
+    "rowsDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "size", "sha256", "count", "format"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "size": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "count": {"type": "integer", "minimum": 1},
+        "format": {"const": "canonical_jsonl_v1"}
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "canonical_order_algorithm", "ordered_sample_ids_sha256", "process_data_count_comparison"],
+      "properties": {
+        "kind": {"const": "raw_rebuilt_v1"},
+        "canonical_order_algorithm": {"const": "nfc_utf8_sample_id_ascending_v1"},
+        "ordered_sample_ids_sha256": {"$ref": "#/$defs/sha256"},
+        "process_data_count_comparison": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["role", "counts"],
+              "properties": {
+                "role": {"const": "counts_only_non_authoritative"},
+                "counts": {"$ref": "#/$defs/splitCounts"}
+              }
+            }
+          ]
+        }
+      }
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authority", "row_count", "class_count", "row_order", "selection_use"],
+      "properties": {
+        "authority": {"const": "raw_locator_per_sample_v1"},
+        "row_count": {"type": "integer", "minimum": 1},
+        "class_count": {"type": "integer", "minimum": 1},
+        "row_order": {"const": "canonical_raw_sample_order"},
+        "selection_use": {"const": "provenance_only_never_model_selection"}
+      }
+    },
+    "splitCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["n_rows", "indT", "indQ", "indD"],
+      "properties": {
+        "n_rows": {"type": "integer", "minimum": 1},
+        "indT": {"type": "integer", "minimum": 1},
+        "indQ": {"type": "integer", "minimum": 1},
+        "indD": {"type": "integer", "minimum": 1}
+      }
+    },
+    "splitArray": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "indices_sha256", "row_ids_sha256"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 1},
+        "indices_sha256": {"$ref": "#/$defs/sha256"},
+        "row_ids_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "deterministicSplits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "seed", "counts", "assignment_sha256", "artifact", "arrays", "relations"],
+      "properties": {
+        "algorithm": {"const": "kbs-content-hash-split-v1"},
+        "seed": {"const": 20260822},
+        "counts": {"$ref": "#/$defs/splitCounts"},
+        "assignment_sha256": {"$ref": "#/$defs/sha256"},
+        "artifact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "size", "sha256", "format"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "size": {"type": "integer", "minimum": 1},
+            "sha256": {"$ref": "#/$defs/sha256"},
+            "format": {"const": "npz"}
+          }
+        },
+        "arrays": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["indT", "indQ", "indD"],
+          "properties": {
+            "indT": {"$ref": "#/$defs/splitArray"},
+            "indQ": {"$ref": "#/$defs/splitArray"},
+            "indD": {"$ref": "#/$defs/splitArray"}
+          }
+        },
+        "relations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["indT_subset_of_indD", "indQ_disjoint_indD", "indQ_disjoint_indT", "indQ_union_indD_full"],
+          "properties": {
+            "indT_subset_of_indD": {"const": true},
+            "indQ_disjoint_indD": {"const": true},
+            "indQ_disjoint_indT": {"const": true},
+            "indQ_union_indD_full": {"const": true}
+          }
+        }
+      }
+    },
+    "shard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shard_id", "semantic", "path", "format", "size", "sha256", "row_start",
+        "row_count", "row_ids_key", "vector_key", "row_ids_sha256",
+        "vectors_sha256", "dtype", "shape"
+      ],
+      "properties": {
+        "shard_id": {"type": "string", "minLength": 1},
+        "semantic": {"enum": ["image", "text", "multilabel"]},
+        "path": {"type": "string", "minLength": 1},
+        "format": {"enum": ["npz", "parquet"]},
+        "size": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "row_start": {"type": "integer", "minimum": 0},
+        "row_count": {"type": "integer", "minimum": 1},
+        "row_ids_key": {"type": "string", "minLength": 1},
+        "vector_key": {"type": "string", "minLength": 1},
+        "row_ids_sha256": {"$ref": "#/$defs/sha256"},
+        "vectors_sha256": {"$ref": "#/$defs/sha256"},
+        "dtype": {"type": "string", "minLength": 1},
+        "shape": {"$ref": "#/$defs/shape"}
+      }
+    }
+  }
+}

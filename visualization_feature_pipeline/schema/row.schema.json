@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/kbs/visualization-feature-row-v1.schema.json",
+  "title": "One immutable visualization feature provenance row",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "row_id", "global_row", "dataset", "sample_id", "identity", "raw_image",
+    "text", "label", "vectors", "deterministic_split_positions"
+  ],
+  "properties": {
+    "row_id": {"$ref": "#/$defs/contentId"},
+    "global_row": {"type": "integer", "minimum": 0},
+    "dataset": {"type": "string", "minLength": 1},
+    "sample_id": {"type": "string", "minLength": 1},
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "source", "locator"],
+      "properties": {
+        "method": {
+          "enum": [
+            "official_id_map", "official_row_map", "direct_source_key",
+            "direct_order_preserving_map"
+          ]
+        },
+        "source": {"$ref": "#/$defs/externalFile"},
+        "locator": {"$ref": "#/$defs/locator"}
+      }
+    },
+    "raw_image": {"$ref": "#/$defs/externalFile"},
+    "text": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["normalization", "raw_empty", "source_items", "fallback", "model_inputs", "aggregation"],
+      "properties": {
+        "normalization": {"const": "unicode_nfc_lf_v1"},
+        "raw_empty": {"type": "boolean"},
+        "source_items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["source", "locator", "value", "utf8_sha256"],
+            "properties": {
+              "source": {"$ref": "#/$defs/externalFile"},
+              "locator": {"$ref": "#/$defs/locator"},
+              "value": {"type": "string"},
+              "utf8_sha256": {"$ref": "#/$defs/sha256"}
+            }
+          }
+        },
+        "fallback": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["policy_id", "value", "utf8_sha256"],
+              "properties": {
+                "policy_id": {"type": "string", "minLength": 1},
+                "value": {"type": "string", "minLength": 1},
+                "utf8_sha256": {"$ref": "#/$defs/sha256"}
+              }
+            }
+          ]
+        },
+        "model_inputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["origin", "source_item_index", "value", "utf8_sha256"],
+            "properties": {
+              "origin": {"enum": ["raw", "fallback"]},
+              "source_item_index": {"type": ["integer", "null"], "minimum": 0},
+              "value": {"type": "string", "minLength": 1},
+              "utf8_sha256": {"$ref": "#/$defs/sha256"}
+            }
+          }
+        },
+        "aggregation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "input_count", "order_sensitive", "version"],
+          "properties": {
+            "method": {"type": "string", "minLength": 1},
+            "input_count": {"type": "integer", "minimum": 1},
+            "order_sensitive": {"type": "boolean"},
+            "version": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "label": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "locator", "encoding", "value", "vector_sha256"],
+      "properties": {
+        "source": {"$ref": "#/$defs/externalFile"},
+        "locator": {"$ref": "#/$defs/locator"},
+        "encoding": {"const": "binary_multihot_uint8_v1"},
+        "value": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "integer", "enum": [0, 1]}
+        },
+        "vector_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "vectors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "text", "multilabel"],
+      "properties": {
+        "image": {"$ref": "#/$defs/vectorRef"},
+        "text": {"$ref": "#/$defs/vectorRef"},
+        "multilabel": {"$ref": "#/$defs/vectorRef"}
+      }
+    },
+    "deterministic_split_positions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["indT", "indQ", "indD"],
+      "properties": {
+        "indT": {"type": ["integer", "null"], "minimum": 0},
+        "indQ": {"type": ["integer", "null"], "minimum": 0},
+        "indD": {"type": ["integer", "null"], "minimum": 0}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["dataset"],
+        "properties": {"dataset": {"const": "nuswide"}}
+      },
+      "then": {
+        "properties": {
+          "label": {
+            "properties": {
+              "source": {
+                "properties": {
+                  "path": {
+                    "pattern": "(^|[\\\\/])labels\\.nuswide-tc21\\.mat$"
+                  }
+                }
+              },
+              "value": {"minItems": 21, "maxItems": 21}
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "contentId": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "externalFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "size", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "size": {"type": "integer", "minimum": 0},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "locator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1},
+        "value": {"type": "string", "minLength": 1}
+      }
+    },
+    "vectorRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shard_id", "shard_row", "dtype", "shape", "sha256", "extractor_id"],
+      "properties": {
+        "shard_id": {"type": "string", "minLength": 1},
+        "shard_row": {"type": "integer", "minimum": 0},
+        "dtype": {"type": "string", "minLength": 1},
+        "shape": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "extractor_id": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

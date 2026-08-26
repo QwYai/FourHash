@@ -1,1 +1,11 @@
-numpy>=1.24
+numpy>=1.24,<3
+scipy>=1.10
+torch>=2.1
+Pillow>=9.5
+matplotlib>=3.7
+ftfy>=6.1
+regex>=2023.8.8
+tqdm>=4.66
+pytest>=7.4
+jsonschema>=4.18
+git+https://github.com/openai/CLIP.git
