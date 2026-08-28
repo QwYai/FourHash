@@ -11,7 +11,7 @@ import run_raw_rebuilt_baseline_sweep as sweep
 
 def test_registered_grid_and_final_json_parser() -> None:
     sweep._require_registered(
-        ("mirflickr",), ("ucch-f",), (16,), (20260822,)
+        ("mirflickr",), ("raneh-f",), (16,), (20260822,)
     )
     with pytest.raises(sweep.SweepError, match="unregistered"):
         sweep._require_registered(

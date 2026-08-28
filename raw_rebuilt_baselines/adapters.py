@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, fields
+import hashlib
 import math
 import os
 import random
@@ -12,12 +13,12 @@ import numpy as np
 import torch
 from torch import nn
 
-from encoders import cirh_feature, dcmh_feature, ucch_feature
+from encoders import cirh_feature, dcmh_feature, raneh_feature, ucch_feature
 
 from .contract import SUPPORTED_BITS, FitArtifact, validate_fit_artifact
 
 
-METHODS = ("ucch-f", "dcmh-f-seminit", "cirh-f")
+METHODS = ("ucch-f", "dcmh-f-seminit", "cirh-f", "raneh-f")
 DEFAULT_SEEDS = (20_260_822, 20_260_823, 20_260_824)
 METHOD_CLAIMS = {
     "ucch-f": (
@@ -34,6 +35,13 @@ METHOD_CLAIMS = {
         "controlled fixed-CLIP512 adaptation retaining CIRH collaborated "
         "similarity, reconstruction, graph mixing, and independent hash "
         "functions; not an official end-to-end reproduction"
+    ),
+    "raneh-f": (
+        "controlled fixed-CLIP512 adaptation of the 2025 KBS RANEH method, "
+        "retaining its first/second-order semantic affinity, FastKAN joint "
+        "network, neighbor mixing, independent hash functions, 5,000-pair "
+        "training quota, and author-script hyperparameters; not a published-"
+        "number reproduction"
     ),
 }
 
@@ -85,23 +93,43 @@ def _core_config_class(method: str) -> type:
         return dcmh_feature.TrainConfig
     if method == "cirh-f":
         return cirh_feature.TrainConfig
+    if method == "raneh-f":
+        return raneh_feature.RANEHConfig
     raise ValueError(f"unsupported method {method!r}")
 
 
-def make_core_config(config: BaselineRunConfig) -> object:
+def make_core_config(
+    config: BaselineRunConfig, *, dataset: str | None = None
+) -> object:
     """Create one core config while preventing silent/unknown overrides."""
 
     config.validate()
     cls = _core_config_class(config.method)
-    allowed = {item.name for item in fields(cls)} - {"bits", "seed", "device"}
+    allowed = {item.name for item in fields(cls)} - {
+        "dataset",
+        "bits",
+        "seed",
+        "device",
+    }
     unknown = set(config.overrides) - allowed
     if unknown:
         raise ValueError(
             f"unknown {config.method} override fields: {sorted(unknown)}"
         )
-    values = dict(config.overrides)
-    values.update(bits=config.bits, seed=config.seed, device=config.device)
-    core_config = cls(**values)
+    if config.method == "raneh-f":
+        if dataset is None:
+            raise ValueError("dataset is required to select RANEH-F author settings")
+        core_config = raneh_feature.config_for_dataset(
+            dataset,
+            bits=config.bits,
+            seed=config.seed,
+            device=config.device,
+            overrides=config.overrides,
+        )
+    else:
+        values = dict(config.overrides)
+        values.update(bits=config.bits, seed=config.seed, device=config.device)
+        core_config = cls(**values)
     # Core validation sometimes also needs n_train; it is repeated in the core.
     if config.method == "ucch-f":
         core_config.validate()
@@ -112,6 +140,8 @@ def make_core_config(config: BaselineRunConfig) -> object:
                 "under dcmh-f-seminit; random-buffer "
                 "initialization is not admitted under this reporting name"
             )
+        core_config.validate()
+    elif config.method == "raneh-f":
         core_config.validate()
     return core_config
 
@@ -218,7 +248,7 @@ def train_core(
     """Call only the legacy-free train/encode cores, never their loaders/CLIs."""
 
     validate_fit_artifact(fit)
-    core_config = make_core_config(config)
+    core_config = make_core_config(config, dataset=fit.dataset)
     deterministic = enable_strict_determinism(config.seed)
     image = owned_float32_input(fit.image, field="fit image features")
     text = owned_float32_input(fit.text, field="fit text features")
@@ -256,7 +286,7 @@ def train_core(
             "initialization": result.initialization_metadata,
             "labels_passed_to_core": "indT_only",
         }
-    else:
+    elif config.method == "cirh-f":
         result = cirh_feature.train_cirh_f(image, text, core_config, verbose=verbose)
         states = {
             "image": _cpu_state(result.image_model),
@@ -272,6 +302,62 @@ def train_core(
             "graph_diagnostics": result.graph_diagnostics,
             "minimum_one_float32_train_square_bytes": int(4 * n_train * n_train),
             "labels_passed_to_core": False,
+        }
+    else:
+        limit = min(int(core_config.train_limit), int(image.shape[0]))
+        if image.shape[0] > limit:
+            row_ids = np.asarray(fit.row_ids, dtype="S64")
+            chosen = np.argsort(row_ids, kind="stable")[:limit]
+            # Selection is content-hash based; restoring fit order keeps the
+            # optimizer's row order independent of the lexical hash values.
+            chosen = np.sort(chosen.astype(np.int64, copy=False))
+        else:
+            chosen = np.arange(image.shape[0], dtype=np.int64)
+        selected_image = np.ascontiguousarray(image[chosen], dtype=np.float32)
+        selected_text = np.ascontiguousarray(text[chosen], dtype=np.float32)
+        effective = len(chosen)
+        if core_config.affinity_prune_k >= effective:
+            raise ValueError(
+                "RANEH-F author affinity cutoff requires at least "
+                f"{core_config.affinity_prune_k + 1} effective training rows; "
+                f"found {effective}"
+            )
+        result = raneh_feature.train_raneh_f(
+            selected_image, selected_text, core_config, verbose=verbose
+        )
+        states = {
+            "image": _cpu_state(result.image_model),
+            "text": _cpu_state(result.text_model),
+            "joint": _cpu_state(result.joint_model),
+        }
+        digest = hashlib.sha256()
+        digest.update(chosen.tobytes())
+        digest.update(np.asarray(fit.row_ids, dtype="S64")[chosen].tobytes())
+        summary = {
+            "image_parameter_delta_l2": float(result.image_parameter_delta),
+            "text_parameter_delta_l2": float(result.text_parameter_delta),
+            "joint_parameter_delta_l2": float(result.joint_parameter_delta),
+            "runtime_seconds": float(result.runtime_seconds),
+            "affinity_diagnostics": result.affinity_diagnostics,
+            "labels_passed_to_core": False,
+            "available_indT_rows": int(image.shape[0]),
+            "effective_training_rows": int(effective),
+            "training_subset_rule": (
+                "all indT rows when T<=5000; otherwise the 5000 smallest "
+                "sealed row-ID hashes, restored to fit order"
+            ),
+            "training_subset_sha256": digest.hexdigest(),
+            "source_audit": {
+                "paper": raneh_feature.PAPER_URL,
+                "official_repository": raneh_feature.OFFICIAL_REPOSITORY,
+                "official_commit": raneh_feature.OFFICIAL_COMMIT,
+                "official_source_sha256": dict(
+                    raneh_feature.OFFICIAL_SOURCE_SHA256
+                ),
+                "recovered_mirror_source_sha256": dict(
+                    raneh_feature.RECOVERED_MIRROR_SOURCE_SHA256
+                ),
+            },
         }
 
     history = [
@@ -327,6 +413,14 @@ def reconstruct_models(
         config = cirh_feature.TrainConfig(**dict(core_config))
         image = cirh_feature.ImageHashNet(config.bits, 512, config.image_hidden_dim)
         text = cirh_feature.TextHashNet(config.bits, 512)
+    elif method == "raneh-f":
+        config = raneh_feature.RANEHConfig(**dict(core_config))
+        image = raneh_feature.ImageHashNet(
+            config.bits, 512, config.image_hidden_dim
+        )
+        text = raneh_feature.TextHashNet(
+            config.bits, 512, config.text_hidden_dim
+        )
     else:
         raise ValueError(f"unsupported method {method!r}")
     if set(state_dicts) not in (
@@ -364,6 +458,8 @@ def encode_core(
         encode = dcmh_feature.encode_all
     elif method == "cirh-f":
         encode = cirh_feature.encode_all
+    elif method == "raneh-f":
+        encode = raneh_feature.encode_all
     else:
         raise ValueError(f"unsupported method {method!r}")
     image_owned = owned_float32_input(

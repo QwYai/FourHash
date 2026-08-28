@@ -61,6 +61,7 @@ def production_code_inventory() -> dict[str, Any]:
             PROJECT_ROOT / "encoders" / "ucch_feature.py",
             PROJECT_ROOT / "encoders" / "dcmh_feature.py",
             PROJECT_ROOT / "encoders" / "cirh_feature.py",
+            PROJECT_ROOT / "encoders" / "raneh_feature.py",
             PROJECT_ROOT / "raw_rebuilt_neural" / "fit_artifact.py",
             PROJECT_ROOT / "raw_rebuilt_neural" / "integrity.py",
             PROJECT_ROOT / "raw_rebuilt_runtime" / "contract.py",
@@ -139,7 +140,7 @@ def train_baseline(
     fit, owned = open_verified_fit(fit_input)
     try:
         binding = build_dataset_binding(fit, rank_input)
-        core_config = asdict(make_core_config(config))
+        core_config = asdict(make_core_config(config, dataset=fit.dataset))
         code_inventory = production_code_inventory()
         run_body = {
             "schema": CHECKPOINT_SCHEMA,

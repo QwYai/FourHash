@@ -36,7 +36,7 @@ semantic sketch, with no float database cache.
   learning, training-only calibration, one-bit MinHash, and lexicographic rank
   freeze.
 - `raw_rebuilt_baselines/` and `encoders/`: registered fixed-feature UCCH-F,
-  DCMH-F-SemInit, and CIRH-F implementations.
+  DCMH-F-SemInit, CIRH-F, and KBS-2025 RANEH-F implementations.
 - `raw_rebuilt_streaming/`: complete-gallery expected-tie evaluator with
   separate label-free rank and label-side metric processes.
 - `raw_rebuilt_visuals/`: trace-backed qualitative evidence generation.

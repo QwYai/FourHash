@@ -27,6 +27,7 @@ from raw_rebuilt_baselines.adapters import (
     make_core_config,
     owned_float32_input,
 )
+from encoders import raneh_feature
 
 
 def _row_ids(count: int) -> np.ndarray:
@@ -168,6 +169,38 @@ def test_bits_methods_and_override_names_are_strict() -> None:
                 "dcmh-f-seminit", 16, 1, overrides={"initialization": "random"}
             )
         )
+    with pytest.raises(ValueError, match="dataset"):
+        make_core_config(BaselineRunConfig("raneh-f", 16, 1))
+
+
+def test_raneh_uses_audited_dataset_specific_author_settings() -> None:
+    mir = make_core_config(
+        BaselineRunConfig("raneh-f", 16, 20260822), dataset="mirflickr"
+    )
+    nus = make_core_config(
+        BaselineRunConfig("raneh-f", 32, 20260822), dataset="nuswide"
+    )
+    coco = make_core_config(
+        BaselineRunConfig("raneh-f", 64, 20260822), dataset="mscoco"
+    )
+    assert (mir.batch_size, mir.affinity_prune_k, mir.affinity_a1, mir.affinity_a2) == (
+        1024,
+        4700,
+        0.4,
+        0.7,
+    )
+    assert (nus.lr_image, nus.lr_text, nus.lambda_hash_similarity) == (
+        0.0004,
+        0.00175,
+        1.0,
+    )
+    assert (coco.lr_joint, coco.lambda_hash_similarity, coco.affinity_a1) == (
+        0.00175,
+        10.0,
+        0.3,
+    )
+    assert len(raneh_feature.OFFICIAL_SOURCE_SHA256) == 5
+    assert len(raneh_feature.RECOVERED_MIRROR_SOURCE_SHA256) == 3
 
 
 def test_binding_detects_train_or_query_identity_change() -> None:
@@ -273,6 +306,19 @@ def test_checkpoint_rejects_changed_qd_split_before_encoding(tmp_path: Path) -> 
                 "batch_size": 4,
                 "graph_k": 2,
                 "image_hidden_dim": 8,
+            },
+        ),
+        (
+            "raneh-f",
+            {
+                "epochs": 1,
+                "batch_size": 4,
+                "affinity_prune_k": 2,
+                "train_limit": 6,
+                "kan_hidden_dim": 8,
+                "kan_num_grids": 2,
+                "image_hidden_dim": 8,
+                "text_hidden_dim": 8,
             },
         ),
     ],

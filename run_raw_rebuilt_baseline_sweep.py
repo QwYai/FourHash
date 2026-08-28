@@ -24,7 +24,7 @@ DATASETS: Mapping[str, tuple[str, str]] = {
     "nuswide": ("nuswide", "nuswide_sealed"),
     "mscoco": ("mscoco", "mscoco_sealed"),
 }
-METHODS = ("ucch-f", "dcmh-f-seminit", "cirh-f")
+METHODS = ("ucch-f", "dcmh-f-seminit", "cirh-f", "raneh-f")
 BITS = (16, 32, 64)
 SEEDS = (20260822, 20260823, 20260824)
 

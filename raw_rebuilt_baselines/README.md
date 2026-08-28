@@ -1,9 +1,9 @@
 # raw_rebuilt_v1 fixed-feature baselines
 
 This package is the only supported entry point for the controlled UCCH-F,
-DCMH-F-SemInit, and CIRH-F comparison runs on the newly extracted CLIP512
-features.  It deliberately does not expose a MAT/ProcessData loader or a
-legacy command-line interface.
+DCMH-F-SemInit, CIRH-F, and RANEH-F comparison runs on the newly extracted
+CLIP512 features.  It deliberately does not expose a MAT/ProcessData loader or
+a legacy command-line interface.
 
 ## Temporal boundary
 
@@ -52,6 +52,17 @@ owned, writable, C-contiguous float32 buffers before any retained core can call
   adaptation.  The retained train graph is quadratic in `T`; the wrapper
   records the minimum one-matrix byte cost and does not replace it with an
   unreported approximation.
+- **RANEH-F** calls only `train_raneh_f` and `encode_all` from
+  `encoders/raneh_feature.py`.  It retains the 2025 KBS method's CLIP input,
+  first/second-order semantic affinity, FastKAN joint network, neighbor mixing,
+  two independent hash functions, 5,000-pair training quota, and the exact
+  dataset-specific author-script hyperparameters.  When the common `indT`
+  pool is larger, the quota is selected by sealed row-ID hashes without
+  labels.  The author repository omits three imported training files; the
+  module records both the official commit and a byte-compatible complete
+  mirror used to recover them.  Query-mAP checkpoint selection and the
+  original top-50 evaluator are replaced by the common final-epoch and
+  full-gallery expected-tie protocol, so the `-F` suffix remains mandatory.
 
 The old loader functions, dataset aliases, exporters, held-out gates, CLIs,
 and every existing prepared result are outside this package and are never
@@ -105,9 +116,13 @@ Method-specific changes are accepted only as one JSON object through
 `--overrides-json`; unknown fields and attempts to override bits, seed, or device
 fail before training.
 
+The registered three-dataset RANEH-F matrix can be launched on the experiment
+server with `tools/run_raneh_f_baseline_sweep.sh`; it selects only `raneh-f`, so
+completed UCCH-F/DCMH-F/CIRH-F artifacts are neither rerun nor modified.
+
 For a registered multi-cell server run, use
 `run_raw_rebuilt_baseline_sweep.py` from the project root.  The driver accepts
-only the three declared datasets, methods, bit widths, and seeds; resolves
+only the declared datasets, methods, bit widths, and seeds; resolves
 exactly one sealed fit artifact per dataset; resumes content-addressed
 checkpoints/codes; verifies both output manifests; appends JSONL audit events;
 and stops before crossing a configurable free-space floor.  Its registered
