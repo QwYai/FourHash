@@ -16,6 +16,7 @@ import csv
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import re
 import sys
 from typing import Any, Mapping, Sequence
 
@@ -44,6 +45,9 @@ DATASET_LABELS = {
 }
 DIRECTIONS = ("i2t", "t2i")
 BASELINES = ("ucch-f", "dcmh-f-seminit", "cirh-f", "raneh-f")
+CELL_PATTERN = re.compile(
+    r"^(mirflickr|nuswide|mscoco)_(ucch-f|dcmh-f-seminit|cirh-f|raneh-f)_b(16|32|64)_s(\d+)$"
+)
 METHODS = ("primary", *BASELINES, "shellguard")
 METHOD_LABELS = {
     "primary": "Primary",
@@ -161,11 +165,24 @@ def select_baseline_code_states(
             if event.get("event") != "cell_complete":
                 continue
             _validated_event(event)
-            method = str(event.get("method", ""))
+            match = CELL_PATTERN.fullmatch(str(event.get("cell", "")))
+            if match is None:
+                continue
+            event_dataset = str(event.get("dataset", match.group(1)))
+            method = str(event.get("method", match.group(2)))
+            event_bits = int(event.get("bits", match.group(3)))
+            event_seed = int(event.get("seed", match.group(4)))
             if (
-                event.get("dataset") != dataset
-                or int(event.get("bits", -1)) != bits
-                or int(event.get("seed", -1)) != seed
+                event_dataset != match.group(1)
+                or method != match.group(2)
+                or event_bits != int(match.group(3))
+                or event_seed != int(match.group(4))
+            ):
+                raise PREvaluationError("baseline event identity fields disagree")
+            if (
+                event_dataset != dataset
+                or event_bits != bits
+                or event_seed != seed
                 or method not in BASELINES
             ):
                 continue

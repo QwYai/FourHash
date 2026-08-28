@@ -58,6 +58,27 @@ def test_selects_every_registered_baseline(tmp_path: Path) -> None:
     assert tuple(selected) == BASELINES
 
 
+def test_selects_hashed_legacy_events_with_identity_in_cell(tmp_path: Path) -> None:
+    log = tmp_path / "legacy.jsonl"
+    lines = []
+    for method in BASELINES:
+        state = tmp_path / method
+        state.mkdir()
+        body = {
+            "schema": DRIVER_SCHEMA,
+            "event": "cell_complete",
+            "cell": f"nuswide_{method}_b64_s20260822",
+            "code_state": str(state.resolve()),
+            "utc": "2026-08-28T00:00:00+00:00",
+        }
+        lines.append(json.dumps({**body, "event_sha256": sha256_json(body)}))
+    log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    selected = select_baseline_code_states(
+        [log], dataset="nuswide", bits=64, seed=20260822
+    )
+    assert tuple(selected) == BASELINES
+
+
 def test_frozen_plan_verification_does_not_rebind_current_source(tmp_path: Path) -> None:
     binding_body = {
         "neural_code_inventory": {"code_inventory_sha256": "1" * 64},
