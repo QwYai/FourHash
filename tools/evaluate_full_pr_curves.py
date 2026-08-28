@@ -598,22 +598,30 @@ def render_figure(result_paths: Sequence[Path], output_stem: Path) -> tuple[Path
     if set(values) != set(DATASETS):
         raise PREvaluationError(f"render requires exactly {DATASETS}")
 
+    # Keep every method on the same visual grammar: a solid line plus a simple
+    # geometric marker.  This avoids assigning an undocumented meaning to dash
+    # patterns while remaining legible in grayscale.
     styles = {
-        "primary": dict(color="#707070", linestyle="--", marker="o"),
-        "ucch-f": dict(color="#2f6db0", linestyle="-.", marker="s"),
-        "dcmh-f-seminit": dict(color="#7b4ab5", linestyle=":", marker="^"),
-        "cirh-f": dict(color="#d08016", linestyle="--", marker="v"),
-        "raneh-f": dict(color="#138a72", linestyle="-.", marker="D"),
-        "shellguard": dict(color="#b2182b", linestyle="-", marker="h"),
+        "primary": dict(color="#4d4d4d", marker="o"),
+        "ucch-f": dict(color="#377eb8", marker="s"),
+        "dcmh-f-seminit": dict(color="#984ea3", marker="^"),
+        "cirh-f": dict(color="#e68613", marker="v"),
+        "raneh-f": dict(color="#1b9e77", marker="D"),
+        "shellguard": dict(color="#d62728", marker="p"),
     }
-    fig, axes = plt.subplots(2, 3, figsize=(7.15, 4.55), sharex=True, sharey=True)
+    # Pair the two retrieval directions horizontally, as is customary for PR
+    # figures, and devote one row to each dataset.
+    fig, axes = plt.subplots(3, 2, figsize=(7.15, 5.45), sharex=True, sharey=True)
     handles = []
     labels = []
-    for column, dataset in enumerate(DATASETS):
+    for row, dataset in enumerate(DATASETS):
         result = values[dataset]
         recall = np.asarray(result["recall_grid"], dtype=np.float64)
-        for row, direction in enumerate(DIRECTIONS):
+        for column, direction in enumerate(DIRECTIONS):
             axis = axes[row, column]
+            direction_label = (
+                "Image $\\to$ Text" if direction == "i2t" else "Text $\\to$ Image"
+            )
             for method in METHODS:
                 precision = np.asarray(
                     result["curves"][direction][method]["precision"], dtype=np.float64
@@ -621,11 +629,14 @@ def render_figure(result_paths: Sequence[Path], output_stem: Path) -> tuple[Path
                 (line,) = axis.plot(
                     recall,
                     precision,
-                    linewidth=1.35 if method != "shellguard" else 1.8,
-                    markersize=3.2,
-                    markevery=(5, 20),
+                    linestyle="-",
+                    linewidth=1.15 if method != "shellguard" else 1.65,
+                    markersize=2.8 if method != "shellguard" else 3.2,
+                    markevery=(4, 12),
                     markerfacecolor="white" if method != "shellguard" else styles[method]["color"],
-                    markeredgewidth=0.8,
+                    markeredgewidth=0.75,
+                    solid_capstyle="round",
+                    zorder=3 if method == "shellguard" else 2,
                     label=METHOD_LABELS[method],
                     **styles[method],
                 )
@@ -633,17 +644,28 @@ def render_figure(result_paths: Sequence[Path], output_stem: Path) -> tuple[Path
                     handles.append(line)
                     labels.append(METHOD_LABELS[method])
             axis.set_xlim(0.0, 1.0)
-            axis.set_ylim(0.0, 1.02)
+            axis.set_ylim(0.30, 1.005)
             axis.set_xticks(np.linspace(0, 1, 6))
-            axis.set_yticks(np.linspace(0, 1, 6))
-            axis.grid(True, color="#dddddd", linewidth=0.45, alpha=0.8)
-            axis.tick_params(labelsize=7, direction="in", top=True, right=True)
-            axis.set_title(
-                f"({chr(97 + row * 3 + column)}) {result['dataset_label']}: {direction.upper()}",
-                fontsize=8,
-                pad=3,
+            axis.set_yticks(np.arange(0.4, 1.01, 0.2))
+            axis.grid(axis="y", color="#dedede", linewidth=0.35, alpha=0.55)
+            axis.tick_params(
+                labelsize=7,
+                direction="in",
+                top=True,
+                right=True,
+                length=2.5,
+                width=0.55,
             )
-            if row == 1:
+            for spine in axis.spines.values():
+                spine.set_color("#777777")
+                spine.set_linewidth(0.55)
+            axis.set_title(
+                f"({chr(97 + row * 2 + column)}) {result['dataset_label']}: "
+                f"{direction_label}",
+                fontsize=8,
+                pad=2.5,
+            )
+            if row == len(DATASETS) - 1:
                 axis.set_xlabel("Recall", fontsize=8)
             if column == 0:
                 axis.set_ylabel("Precision", fontsize=8)
@@ -651,14 +673,26 @@ def render_figure(result_paths: Sequence[Path], output_stem: Path) -> tuple[Path
         handles,
         labels,
         loc="upper center",
-        ncol=3,
-        frameon=False,
-        fontsize=7.4,
-        handlelength=2.7,
-        columnspacing=1.25,
-        bbox_to_anchor=(0.5, 1.005),
+        ncol=len(METHODS),
+        frameon=True,
+        fancybox=False,
+        framealpha=1.0,
+        edgecolor="#777777",
+        fontsize=7.0,
+        handlelength=1.9,
+        handletextpad=0.4,
+        columnspacing=0.8,
+        borderpad=0.3,
+        bbox_to_anchor=(0.5, 0.998),
     )
-    fig.subplots_adjust(left=0.075, right=0.995, bottom=0.09, top=0.875, wspace=0.12, hspace=0.28)
+    fig.subplots_adjust(
+        left=0.075,
+        right=0.995,
+        bottom=0.075,
+        top=0.915,
+        wspace=0.12,
+        hspace=0.30,
+    )
     stem = Path(output_stem).expanduser().resolve()
     stem.parent.mkdir(parents=True, exist_ok=True)
     pdf_path = stem.with_suffix(".pdf")
@@ -675,7 +709,7 @@ def render_figure(result_paths: Sequence[Path], output_stem: Path) -> tuple[Path
         ],
         "pdf": {"path": str(pdf_path), "sha256": sha256_file(pdf_path)},
         "png": {"path": str(png_path), "sha256": sha256_file(png_path)},
-        "layout": "three datasets by two retrieval directions",
+        "layout": "three dataset rows by two retrieval-direction columns",
         "methods": list(METHODS),
     }
     atomic_write_json(
