@@ -9,8 +9,10 @@ from raw_rebuilt_runtime.contract import sha256_json
 from tools.evaluate_full_pr_curves import (
     BASELINES,
     DRIVER_SCHEMA,
+    PLAN_SCHEMA,
     interpolated_pr_sum,
     select_baseline_code_states,
+    verified_frozen_ccde_plan,
 )
 
 
@@ -54,3 +56,31 @@ def test_selects_every_registered_baseline(tmp_path: Path) -> None:
         [log], dataset="mirflickr", bits=64, seed=20260822
     )
     assert tuple(selected) == BASELINES
+
+
+def test_frozen_plan_verification_does_not_rebind_current_source(tmp_path: Path) -> None:
+    binding_body = {
+        "neural_code_inventory": {"code_inventory_sha256": "1" * 64},
+        "streaming_code_inventory": {"code_inventory_sha256": "2" * 64},
+        "implementation_inventory": {"code_inventory_sha256": "3" * 64},
+    }
+    binding = {
+        **binding_body,
+        "plan_binding_sha256": sha256_json(binding_body),
+    }
+    body = {
+        "schema": PLAN_SCHEMA,
+        "status": "rank_state_frozen",
+        "labels_loaded_during_freeze": False,
+        "formal_gate_or_fallback_used": False,
+        "primary_shell_order_is_invariant": True,
+        "binding": binding,
+        "runtime_identity": {"source_seal_sha256": "4" * 64},
+    }
+    plan = {**body, "rank_plan_sha256": sha256_json(body)}
+    (tmp_path / "evaluation_plan.json").write_text(
+        json.dumps(plan), encoding="utf-8"
+    )
+    assert verified_frozen_ccde_plan(tmp_path)["rank_plan_sha256"] == plan[
+        "rank_plan_sha256"
+    ]

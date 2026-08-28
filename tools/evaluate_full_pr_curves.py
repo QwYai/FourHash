@@ -30,7 +30,7 @@ from raw_rebuilt_neural.ccde_ranking import _open_encoding_cache
 from raw_rebuilt_runtime import load_label_free_rank_inputs, load_metric_labels
 from raw_rebuilt_runtime.contract import atomic_write_json, numeric_sha256, sha256_file, sha256_json
 from raw_rebuilt_streaming.codes import open_code_state
-from tools.formal_ccde_streaming_eval import _verify_plan
+from tools.formal_ccde_streaming_eval import PLAN_SCHEMA
 
 
 RESULT_SCHEMA = "shellguard_complete_gallery_pr_v1"
@@ -81,6 +81,59 @@ def _load_jsonl(path: Path) -> list[Mapping[str, Any]]:
                 raise PREvaluationError(f"event is not an object at {path}:{line_number}")
             result.append(value)
     return result
+
+
+def verified_frozen_ccde_plan(plan_root: Path) -> Mapping[str, Any]:
+    """Verify an immutable CCDE plan without rebinding it to today's source.
+
+    Historical plans retain and hash their own neural, streaming, and formal
+    implementation inventories.  A later baseline addition must not make the
+    frozen codes unreadable, so this check validates the sealed inventories
+    rather than requiring byte equality with the current checkout.
+    """
+
+    root = Path(plan_root).expanduser()
+    if root.is_symlink() or not root.resolve(strict=True).is_dir():
+        raise PREvaluationError("CCDE plan root must be a regular directory")
+    root = root.resolve(strict=True)
+    plan_path = root / "evaluation_plan.json"
+    if plan_path.is_symlink() or not plan_path.is_file():
+        raise PREvaluationError("CCDE evaluation plan is missing or linked")
+    plan = _load_json(plan_path)
+    body = {key: plan[key] for key in plan if key != "rank_plan_sha256"}
+    if (
+        plan.get("schema") != PLAN_SCHEMA
+        or plan.get("status") != "rank_state_frozen"
+        or plan.get("rank_plan_sha256") != sha256_json(body)
+    ):
+        raise PREvaluationError("CCDE evaluation plan hash changed")
+    if (
+        plan.get("labels_loaded_during_freeze") is not False
+        or plan.get("formal_gate_or_fallback_used") is not False
+        or plan.get("primary_shell_order_is_invariant") is not True
+    ):
+        raise PREvaluationError("CCDE frozen-rank invariants changed")
+    binding = plan.get("binding")
+    if not isinstance(binding, Mapping):
+        raise PREvaluationError("CCDE plan binding is missing")
+    binding_body = {
+        key: binding[key] for key in binding if key != "plan_binding_sha256"
+    }
+    if binding.get("plan_binding_sha256") != sha256_json(binding_body):
+        raise PREvaluationError("CCDE plan binding hash changed")
+    for field in (
+        "neural_code_inventory",
+        "streaming_code_inventory",
+        "implementation_inventory",
+    ):
+        inventory = binding.get(field)
+        if not isinstance(inventory, Mapping) or not any(
+            str(key).endswith("sha256") for key in inventory
+        ):
+            raise PREvaluationError(f"CCDE frozen {field} is missing")
+    if not isinstance(plan.get("runtime_identity"), Mapping):
+        raise PREvaluationError("CCDE runtime identity is missing")
+    return plan
 
 
 def _validated_event(event: Mapping[str, Any]) -> None:
@@ -301,7 +354,7 @@ def evaluate_dataset(
         torch.backends.cuda.matmul.allow_tf32 = False
 
     plan_root = Path(ccde_plan_root).expanduser().resolve(strict=True)
-    plan = _verify_plan(plan_root)
+    plan = verified_frozen_ccde_plan(plan_root)
     if plan.get("dataset") != dataset:
         raise PREvaluationError("CCDE plan belongs to another dataset")
     identity = plan["runtime_identity"]
@@ -372,8 +425,17 @@ def evaluate_dataset(
         for method in ("primary", "shellguard"):
             provenance[method] = {
                 "ccde_plan": str(plan_root),
+                "evaluation_plan_file_sha256": sha256_file(
+                    plan_root / "evaluation_plan.json"
+                ),
                 "rank_plan_sha256": plan["rank_plan_sha256"],
                 "encoding_cache_manifest_sha256": sha256_file(cache_manifest_path),
+                "frozen_neural_code_inventory_sha256": plan["binding"][
+                    "neural_code_inventory"
+                ]["code_inventory_sha256"],
+                "frozen_streaming_code_inventory_sha256": plan["binding"][
+                    "streaming_code_inventory"
+                ]["code_inventory_sha256"],
             }
 
         if set(method_codes) != set(METHODS):
