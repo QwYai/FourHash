@@ -40,9 +40,13 @@ def _formal(path: Path, datasets: tuple[str, ...]) -> None:
     )
 
 
-def _baseline(path: Path, dataset: str) -> None:
+def _baseline(
+    path: Path,
+    dataset: str,
+    methods: tuple[str, ...] = comparison.BASELINE_METHODS,
+) -> None:
     rows = []
-    for method_index, method in enumerate(comparison.BASELINE_METHODS):
+    for method_index, method in enumerate(methods):
         for bits in comparison.BITS:
             for direction in comparison.DIRECTIONS:
                 score = 0.50 + 0.01 * method_index
@@ -65,7 +69,8 @@ def _baseline(path: Path, dataset: str) -> None:
             "status": "VERIFIED",
             "dataset": dataset,
             "seeds": [20260822],
-            "deep_verified_cells": 12,
+            "methods": list(methods),
+            "deep_verified_cells": len(methods) * 3,
             "rows": rows,
         },
     )
@@ -97,3 +102,21 @@ def test_multi_dataset_comparison_and_latex(tmp_path: Path) -> None:
     assert "MIRFlickr-25K" in latex
     assert "NUS-WIDE-TC21" in latex
     assert "\\textbf{0.800}" in latex
+
+
+def test_accepts_disjoint_method_aggregates(tmp_path: Path) -> None:
+    formal = tmp_path / "formal.json"
+    _formal(formal, ("mirflickr",))
+    legacy = tmp_path / "legacy.json"
+    recent = tmp_path / "recent.json"
+    _baseline(legacy, "mirflickr", comparison.BASELINE_METHODS[:-1])
+    _baseline(recent, "mirflickr", comparison.BASELINE_METHODS[-1:])
+    result = comparison.build_comparison(
+        formal_path=formal,
+        baseline_paths={"mirflickr": [legacy, recent]},
+        json_output=tmp_path / "comparison.json",
+        csv_output=tmp_path / "comparison.csv",
+        tex_output=tmp_path / "comparison.tex",
+    )
+    assert len(result["baseline_sources"]) == 2
+    assert len(result["rows"]) == 36

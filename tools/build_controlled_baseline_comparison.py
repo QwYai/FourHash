@@ -69,22 +69,49 @@ def _verified_json(
 
 
 def _baseline_index(
-    value: Mapping[str, Any], *, dataset: str
+    values: Sequence[Mapping[str, Any]], *, dataset: str
 ) -> Mapping[tuple[str, int, str], Mapping[str, Any]]:
-    if value.get("dataset") != dataset or value.get("seeds") != [20260822]:
-        raise ControlledComparisonError(
-            f"baseline aggregate is not the main {dataset} seed"
-        )
     result: dict[tuple[str, int, str], Mapping[str, Any]] = {}
-    for row in value.get("rows", []):
-        key = (
-            str(row.get("method")),
-            int(row.get("bits", -1)),
-            str(row.get("direction")),
-        )
-        if row.get("dataset") != dataset or key in result:
-            raise ControlledComparisonError(f"invalid or duplicate baseline row {key}")
-        result[key] = row
+    for value in values:
+        if value.get("dataset") != dataset or value.get("seeds") != [20260822]:
+            raise ControlledComparisonError(
+                f"baseline aggregate is not the main {dataset} seed"
+            )
+        declared = tuple(str(method) for method in value.get("methods", ()))
+        if (
+            not declared
+            or len(set(declared)) != len(declared)
+            or any(method not in BASELINE_METHODS for method in declared)
+        ):
+            raise ControlledComparisonError("baseline aggregate method inventory changed")
+        local: set[tuple[str, int, str]] = set()
+        for row in value.get("rows", []):
+            key = (
+                str(row.get("method")),
+                int(row.get("bits", -1)),
+                str(row.get("direction")),
+            )
+            if (
+                row.get("dataset") != dataset
+                or key[0] not in declared
+                or key in local
+                or key in result
+            ):
+                raise ControlledComparisonError(
+                    f"invalid or duplicate baseline row {key}"
+                )
+            local.add(key)
+            result[key] = row
+        expected_local = {
+            (method, bits, direction)
+            for method in declared
+            for bits in BITS
+            for direction in DIRECTIONS
+        }
+        if local != expected_local:
+            raise ControlledComparisonError(
+                f"incomplete aggregate-local baseline grid for {dataset}"
+            )
     expected = {
         (method, bits, direction)
         for method in BASELINE_METHODS
@@ -188,7 +215,7 @@ def _latex(rows: Sequence[Mapping[str, Any]], datasets: Sequence[str]) -> str:
 def build_comparison(
     *,
     formal_path: Path,
-    baseline_paths: Mapping[str, Path],
+    baseline_paths: Mapping[str, Path | Sequence[Path]],
     json_output: Path,
     csv_output: Path,
     tex_output: Path,
@@ -210,19 +237,27 @@ def build_comparison(
     rows: list[dict[str, Any]] = []
     baseline_sources: list[dict[str, Any]] = []
     for dataset in datasets:
-        baseline_path = baseline_paths[dataset].expanduser().resolve(strict=True)
-        baseline = _verified_json(baseline_path, schema=BASELINE_SCHEMA)
-        baseline_rows = _baseline_index(baseline, dataset=dataset)
+        raw_paths = baseline_paths[dataset]
+        paths = (raw_paths,) if isinstance(raw_paths, Path) else tuple(raw_paths)
+        if not paths:
+            raise ControlledComparisonError(f"no baseline aggregate for {dataset}")
+        baselines: list[Mapping[str, Any]] = []
+        for raw_path in paths:
+            baseline_path = Path(raw_path).expanduser().resolve(strict=True)
+            baseline = _verified_json(baseline_path, schema=BASELINE_SCHEMA)
+            baselines.append(baseline)
+            baseline_sources.append(
+                {
+                    "dataset": dataset,
+                    "path": str(baseline_path),
+                    "file_sha256": sha256_file(baseline_path),
+                    "aggregate_sha256": baseline["aggregate_sha256"],
+                    "methods": baseline["methods"],
+                    "deep_verified_cells": baseline["deep_verified_cells"],
+                }
+            )
+        baseline_rows = _baseline_index(baselines, dataset=dataset)
         formal_rows = _formal_index(formal, dataset=dataset)
-        baseline_sources.append(
-            {
-                "dataset": dataset,
-                "path": str(baseline_path),
-                "file_sha256": sha256_file(baseline_path),
-                "aggregate_sha256": baseline["aggregate_sha256"],
-                "deep_verified_cells": baseline["deep_verified_cells"],
-            }
-        )
         for method in METHODS:
             for bits in BITS:
                 for direction in DIRECTIONS:
@@ -341,11 +376,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    baseline_paths: dict[str, Path] = {}
+    baseline_paths: dict[str, list[Path]] = {}
     for dataset, path in args.baseline:
-        if dataset in baseline_paths:
-            raise ControlledComparisonError(f"duplicate baseline {dataset}")
-        baseline_paths[dataset] = path
+        baseline_paths.setdefault(dataset, []).append(path)
     result = build_comparison(
         formal_path=args.formal,
         baseline_paths=baseline_paths,
