@@ -30,12 +30,12 @@ from raw_rebuilt_streaming.orchestrator import run_streaming_evaluation
 from raw_rebuilt_streaming.plan import StreamingPlanConfig, freeze_rank_plan
 
 
-METHODS = ("ucch-f", "dcmh-f-seminit", "cirh-f")
+METHODS = ("ucch-f", "dcmh-f-seminit", "cirh-f", "raneh-f")
 BITS = (16, 32, 64)
 DATASETS = ("mirflickr", "nuswide", "mscoco")
 DEFAULT_SEEDS = (20260822, 20260823, 20260824)
 CELL_PATTERN = re.compile(
-    r"^(mirflickr|nuswide|mscoco)_(ucch-f|dcmh-f-seminit|cirh-f)_b(16|32|64)_s(\d+)$"
+    r"^(mirflickr|nuswide|mscoco)_(ucch-f|dcmh-f-seminit|cirh-f|raneh-f)_b(16|32|64)_s(\d+)$"
 )
 DRIVER_SCHEMA = "raw_rebuilt_baseline_streaming_driver_event_v1"
 
@@ -88,12 +88,13 @@ def _registered_inputs(
     *,
     dataset: str,
     seeds: Sequence[int],
+    methods: Sequence[str] = METHODS,
 ) -> Mapping[str, Mapping[str, Any]]:
     requested = {
         f"{dataset}_{method}_b{bits}_s{seed}"
         for seed in seeds
         for bits in BITS
-        for method in METHODS
+        for method in methods
     }
     completed: dict[str, Mapping[str, Any]] = {}
     for event in _load_jsonl(event_log):
@@ -206,6 +207,7 @@ def run_sweep(
     runtime_root: Path,
     output_root: Path,
     seeds: Sequence[int],
+    methods: Sequence[str],
     minimum_free_bytes: int,
     query_chunk_size: int,
     rank_device: str,
@@ -222,14 +224,19 @@ def run_sweep(
     output_root = output_root.expanduser().resolve()
     output_root.mkdir(parents=True, exist_ok=True)
     event_path = output_root / "evaluation_events.jsonl"
-    inputs = _registered_inputs(source_events, dataset=dataset, seeds=seeds)
+    inputs = _registered_inputs(
+        source_events,
+        dataset=dataset,
+        seeds=seeds,
+        methods=methods,
+    )
     completed = _completed_driver_events(event_path)
 
     ordered = [
         f"{dataset}_{method}_b{bits}_s{seed}"
         for seed in seeds
         for bits in BITS
-        for method in METHODS
+        for method in methods
     ]
     processed = 0
     skipped = 0
@@ -329,6 +336,7 @@ def run_sweep(
     return {
         "status": "COMPLETE" if requested <= set(final_completed) else "IN_PROGRESS",
         "dataset": dataset,
+        "methods": list(methods),
         "requested_cells": len(ordered),
         "verified_complete_cells": len(requested & set(final_completed)),
         "processed_cells": processed,
@@ -348,6 +356,16 @@ def _csv_seeds(value: str) -> tuple[int, ...]:
     return result
 
 
+def _csv_methods(value: str) -> tuple[str, ...]:
+    result = tuple(item.strip() for item in value.split(",") if item.strip())
+    unknown = sorted(set(result) - set(METHODS))
+    if not result or len(set(result)) != len(result) or unknown:
+        raise argparse.ArgumentTypeError(
+            f"methods must be unique members of {METHODS}; unknown={unknown}"
+        )
+    return result
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", choices=DATASETS, default="mirflickr")
@@ -355,6 +373,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--runtime", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--seeds", type=_csv_seeds, default=DEFAULT_SEEDS)
+    parser.add_argument("--methods", type=_csv_methods, default=METHODS)
     parser.add_argument("--minimum-free-bytes", type=int, default=1 << 30)
     parser.add_argument("--query-chunk-size", type=int, default=64)
     parser.add_argument("--rank-device", choices=("cpu", "cuda"), default="cuda")
@@ -370,6 +389,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         runtime_root=args.runtime,
         output_root=args.output_root,
         seeds=args.seeds,
+        methods=args.methods,
         minimum_free_bytes=args.minimum_free_bytes,
         query_chunk_size=args.query_chunk_size,
         rank_device=args.rank_device,

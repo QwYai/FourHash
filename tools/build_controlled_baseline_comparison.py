@@ -25,7 +25,7 @@ FORMAL_SCHEMAS = (
 # original CCDE aggregate schema.
 FORMAL_SCHEMA = FORMAL_SCHEMAS[0]
 BASELINE_SCHEMA = "raw_rebuilt_baseline_streaming_aggregate_v1"
-COMPARISON_SCHEMA = "raw_rebuilt_controlled_baseline_comparison_v2"
+COMPARISON_SCHEMA = "raw_rebuilt_controlled_baseline_comparison_v3"
 DATASETS = ("mirflickr", "nuswide", "mscoco")
 DATASET_LABELS = {
     "mirflickr": "MIRFlickr-25K",
@@ -34,12 +34,13 @@ DATASET_LABELS = {
 }
 BITS = (16, 32, 64)
 DIRECTIONS = ("i2t", "t2i")
-BASELINE_METHODS = ("ucch-f", "dcmh-f-seminit", "cirh-f")
+BASELINE_METHODS = ("ucch-f", "dcmh-f-seminit", "cirh-f", "raneh-f")
 METHODS = (*BASELINE_METHODS, "primary", "shellguard")
 DISPLAY = {
     "ucch-f": "UCCH-F",
     "dcmh-f-seminit": "DCMH-F-SemInit",
     "cirh-f": "CIRH-F",
+    "raneh-f": "RANEH-F",
     "primary": "Primary",
     "shellguard": r"\method",
 }
@@ -140,7 +141,7 @@ def _latex(rows: Sequence[Mapping[str, Any]], datasets: Sequence[str]) -> str:
         ),
         r"\label{tab:controlled-baselines}",
         r"\footnotesize",
-        r"\setlength{\tabcolsep}{4.1pt}",
+        r"\setlength{\tabcolsep}{3.6pt}",
         r"\begin{tabular}{llrrrrrr}",
         r"\toprule",
         r"& & \multicolumn{3}{c}{I2T mAP} & \multicolumn{3}{c}{T2I mAP} \\",

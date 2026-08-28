@@ -128,6 +128,15 @@ not committed. Formal workers verify its registered hashes from
 `raw_rebuilt_neural.ccde_contract`; set `SHELLGUARD_CCDE_FREEZE` to the local
 `freeze.json` when running artifact-bound integration tests.
 
+RANEH-F can be selected without changing its registered training or ranking
+contract by passing `--methods raneh-f` to
+`tools/run_baseline_streaming_eval_sweep.py`. The complete-gallery PR receipt
+is generated with `tools/evaluate_full_pr_curves.py`: it compares Primary,
+UCCH-F, DCMH-F-SemInit, CIRH-F, RANEH-F, and ShellGuard at the registered
+64-bit seed, and closes every integer-distance tie block before sampling the
+101-point macro-average curve. The `render` subcommand combines the three
+dataset receipts into the six-panel paper figure.
+
 ## Tests
 
 The tests create synthetic temporary data and do not require the real datasets:

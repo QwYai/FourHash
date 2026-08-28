@@ -65,7 +65,7 @@ def _baseline(path: Path, dataset: str) -> None:
             "status": "VERIFIED",
             "dataset": dataset,
             "seeds": [20260822],
-            "deep_verified_cells": 9,
+            "deep_verified_cells": 12,
             "rows": rows,
         },
     )
@@ -91,7 +91,7 @@ def test_multi_dataset_comparison_and_latex(tmp_path: Path) -> None:
         tex_output=output_tex,
     )
     assert result["datasets"] == list(datasets)
-    assert len(result["rows"]) == 60
+    assert len(result["rows"]) == 72
     assert result["strict_best_cells"] == result["comparison_cells"] == 36
     latex = output_tex.read_text(encoding="utf-8")
     assert "MIRFlickr-25K" in latex

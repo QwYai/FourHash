@@ -28,7 +28,7 @@ from tools.run_baseline_streaming_eval_sweep import DATASETS, DRIVER_SCHEMA, MET
 
 AGGREGATE_SCHEMA = "raw_rebuilt_baseline_streaming_aggregate_v1"
 CELL_PATTERN = re.compile(
-    r"^(mirflickr|nuswide|mscoco)_(ucch-f|dcmh-f-seminit|cirh-f)_b(16|32|64)_s(\d+)$"
+    r"^(mirflickr|nuswide|mscoco)_(ucch-f|dcmh-f-seminit|cirh-f|raneh-f)_b(16|32|64)_s(\d+)$"
 )
 DIRECTIONS = ("i2t", "t2i")
 BITS = (16, 32, 64)
@@ -67,12 +67,13 @@ def _completion_events(
     *,
     dataset: str,
     seeds: Sequence[int],
+    methods: Sequence[str] = METHODS,
 ) -> Mapping[str, Mapping[str, Any]]:
     requested = {
         f"{dataset}_{method}_b{bits}_s{seed}"
         for seed in seeds
         for bits in BITS
-        for method in METHODS
+        for method in methods
     }
     completed: dict[str, Mapping[str, Any]] = {}
     for event in _events(path):
@@ -202,6 +203,7 @@ def aggregate(
     event_log: Path,
     output_root: Path,
     seeds: Sequence[int],
+    methods: Sequence[str],
     json_output: Path,
     csv_output: Path,
 ) -> Mapping[str, Any]:
@@ -213,14 +215,19 @@ def aggregate(
         output.parent.mkdir(parents=True, exist_ok=True)
     event_log = event_log.expanduser().resolve(strict=True)
     output_root = output_root.expanduser().resolve(strict=True)
-    completed = _completion_events(event_log, dataset=dataset, seeds=seeds)
+    completed = _completion_events(
+        event_log,
+        dataset=dataset,
+        seeds=seeds,
+        methods=methods,
+    )
     rows: list[Mapping[str, Any]] = []
     sources: list[Mapping[str, Any]] = []
     ordered = [
         f"{dataset}_{method}_b{bits}_s{seed}"
         for seed in seeds
         for bits in BITS
-        for method in METHODS
+        for method in methods
     ]
     for cell in ordered:
         cell_rows, source = _result_rows(
@@ -232,11 +239,11 @@ def aggregate(
         key=lambda row: (
             int(row["seed"]),
             int(row["bits"]),
-            METHODS.index(str(row["method"])),
+            methods.index(str(row["method"])),
             DIRECTIONS.index(str(row["direction"])),
         )
     )
-    expected_rows = len(seeds) * len(BITS) * len(METHODS) * len(DIRECTIONS)
+    expected_rows = len(seeds) * len(BITS) * len(methods) * len(DIRECTIONS)
     if len(rows) != expected_rows:
         raise BaselineAggregateError("aggregate row count changed")
     body: dict[str, Any] = {
@@ -245,7 +252,7 @@ def aggregate(
         "dataset": dataset,
         "seeds": list(seeds),
         "bits": list(BITS),
-        "methods": list(METHODS),
+        "methods": list(methods),
         "directions": list(DIRECTIONS),
         "event_log": {
             "path": str(event_log),
@@ -276,12 +283,23 @@ def _csv_seeds(value: str) -> tuple[int, ...]:
     return seeds
 
 
+def _csv_methods(value: str) -> tuple[str, ...]:
+    result = tuple(item.strip() for item in value.split(",") if item.strip())
+    unknown = sorted(set(result) - set(METHODS))
+    if not result or len(set(result)) != len(result) or unknown:
+        raise argparse.ArgumentTypeError(
+            f"methods must be unique members of {METHODS}; unknown={unknown}"
+        )
+    return result
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", choices=DATASETS, default="mirflickr")
     parser.add_argument("--event-log", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--seeds", type=_csv_seeds, default=(20260822,))
+    parser.add_argument("--methods", type=_csv_methods, default=METHODS)
     parser.add_argument("--json-output", type=Path, required=True)
     parser.add_argument("--csv-output", type=Path, required=True)
     return parser
@@ -294,6 +312,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         event_log=args.event_log,
         output_root=args.output_root,
         seeds=args.seeds,
+        methods=args.methods,
         json_output=args.json_output,
         csv_output=args.csv_output,
     )

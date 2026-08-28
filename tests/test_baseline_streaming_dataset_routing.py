@@ -23,6 +23,16 @@ def test_cell_pattern_preserves_dataset_identity() -> None:
             "20260822",
         )
     assert sweep.CELL_PATTERN.fullmatch("nuswide_unknown_b32_s20260822") is None
+    raneh = sweep.CELL_PATTERN.fullmatch(
+        "mscoco_raneh-f_b64_s20260824"
+    )
+    assert raneh is not None
+    assert raneh.groups() == (
+        "mscoco",
+        "raneh-f",
+        "64",
+        "20260824",
+    )
 
 
 def test_registered_training_events_are_filtered_by_dataset(tmp_path: Path) -> None:
@@ -48,10 +58,18 @@ def test_registered_training_events_are_filtered_by_dataset(tmp_path: Path) -> N
     found = sweep._registered_inputs(
         events, dataset="nuswide", seeds=(20260822,)
     )
-    assert len(found) == 9
+    assert len(found) == 12
     assert {item["dataset"] for item in found.values()} == {"nuswide"}
     with pytest.raises(sweep.BaselineSweepError, match="missing cells"):
         sweep._registered_inputs(events, dataset="mscoco", seeds=(20260822,))
+    raneh_only = sweep._registered_inputs(
+        events,
+        dataset="nuswide",
+        seeds=(20260822,),
+        methods=("raneh-f",),
+    )
+    assert len(raneh_only) == 3
+    assert {item["method"] for item in raneh_only.values()} == {"raneh-f"}
 
 
 def test_aggregate_completion_grid_is_dataset_scoped(tmp_path: Path) -> None:
@@ -71,7 +89,14 @@ def test_aggregate_completion_grid_is_dataset_scoped(tmp_path: Path) -> None:
     found = aggregate._completion_events(
         events, dataset="nuswide", seeds=(20260822,)
     )
-    assert len(found) == 9
+    assert len(found) == 12
+    raneh_only = aggregate._completion_events(
+        events,
+        dataset="nuswide",
+        seeds=(20260822,),
+        methods=("raneh-f",),
+    )
+    assert len(raneh_only) == 3
     with pytest.raises(aggregate.BaselineAggregateError, match="incomplete"):
         aggregate._completion_events(
             events, dataset="mirflickr", seeds=(20260822,)
